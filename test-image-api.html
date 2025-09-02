@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Test Image Generation API</title>
+  <style>
+    :root {
+      --bg:#0b0c10; --panel:#11151a; --text:#e8edf2; --muted:#9aa4ad; --border:#242733; --ok:#10b981; --err:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#090a0f,#0b0c10 40%);color:var(--text);font:15px/1.45 system-ui,Segoe UI,Roboto}
+    .wrap{max-width:900px;margin:32px auto;padding:0 16px}
+    h1{font-size:22px;margin:0 0 12px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));border:1px solid var(--border);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.25);margin-bottom:16px}
+    .panel{padding:16px}
+    label{display:block;font-size:13px;color:var(--muted);margin:10px 0 6px}
+    input,select,textarea{width:100%;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 12px;outline:none}
+    textarea{min-height:84px;resize:vertical}
+    .row{display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:10px}
+    @media (max-width:740px){.row{grid-template-columns:1fr}}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    button{appearance:none;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer}
+    .status{font-size:13px;margin-left:auto}
+    .status[aria-busy="true"]::before{content:"⏳ Generating…";color:#f59e0b}
+    .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));padding:12px}
+    figure{margin:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#0e1117}
+    img.thumb{width:100%;height:240px;object-fit:cover;display:block;background:#0a0c10}
+    .meta{display:flex;align-items:center;justify-content:space-between;padding:10px;border-top:1px solid var(--border)}
+    .muted{color:var(--muted);font-size:12px}
+    .ok{color:var(--ok)}
+    .err{color:var(--err)}
+    code{background:#0f172a;border:1px solid var(--border);padding:3px 6px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Test Image Generation API</h1>
+
+    <div class="card"><div class="panel">
+      <label for="endpoint">API Endpoint</label>
+      <input id="endpoint" type="text" value="http://localhost:3000/generate-image" />
+      <div class="muted" style="margin-top:6px">Change this if your server runs elsewhere (e.g. <code>https://your-domain.com/generate-image</code>).</div>
+    </div></div>
+
+    <div class="card"><div class="panel">
+      <form id="form">
+        <label for="prompt">Prompt</label>
+        <textarea id="prompt" placeholder="e.g. A cozy reading nook with plants, soft afternoon light, and a cat on the chair"></textarea>
+
+        <div class="row">
+          <div>
+            <label for="size">Size</label>
+            <select id="size">
+              <option value="1024x1024" selected>1024×1024 (square)</option>
+              <option value="1792x1024">1792×1024 (landscape)</option>
+              <option value="1024x1792">1024×1792 (portrait)</option>
+            </select>
+          </div>
+          <div>
+            <label for="n">How many</label>
+            <select id="n">
+              <option>1</option>
+              <option selected>2</option>
+              <option>3</option>
+              <option>4</option>
+            </select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button type="submit">🔮 Generate</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="clear">🧹 Clear gallery</button>
+          <span id="status" class="status" aria-busy="false"></span>
+        </div>
+        <div id="message" class="muted" style="margin-top:8px"></div>
+      </form>
+    </div></div>
+
+    <div class="card"><div class="panel">
+      <div id="gallery" class="grid" aria-live="polite"></div>
+    </div></div>
+
+    <p class="muted">Note: Your server must respond with CORS headers that allow this page's origin. For quick local tests, <code>ALLOWED_ORIGIN=*</code> is fine. In production, set it to your site origin.</p>
+  </div>
+
+  <script>
+    const form = document.getElementById('form');
+    const endpointEl = document.getElementById('endpoint');
+    const promptEl = document.getElementById('prompt');
+    const sizeEl = document.getElementById('size');
+    const nEl = document.getElementById('n');
+    const gallery = document.getElementById('gallery');
+    const statusEl = document.getElementById('status');
+    const msgEl = document.getElementById('message');
+    const clearBtn = document.getElementById('clear');
+
+    // load last prompt
+    promptEl.value = localStorage.getItem('lastPrompt') || '';
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      msgEl.textContent = '';
+
+      const endpoint = endpointEl.value.trim();
+      const prompt = promptEl.value.trim();
+      const n = Math.max(1, Math.min(4, parseInt(nEl.value, 10)));
+      const size = sizeEl.value;
+
+      if (!endpoint) return setMsg('Please provide an API endpoint.', true);
+      if (!prompt)  return setMsg('Please enter a prompt.', true);
+
+      localStorage.setItem('lastPrompt', prompt);
+      setBusy(true);
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, n, size }),
+          mode: 'cors'
+        });
+
+        const text = await res.text();
+        let data = {};
+        try { data = JSON.parse(text); } catch {}
+
+        if (!res.ok) {
+          const human = data?.error || `${res.status} ${res.statusText}`;
+          throw new Error(human + (text && text !== '{}' ? `\n\nRaw: ${text}` : ''));
+        }
+
+        const images = Array.isArray(data.images) ? data.images : [];
+        if (!images.length) throw new Error('No images returned.');
+
+        images.forEach((url, i) => addCard(url, prompt, i));
+        setMsg(`Generated ${images.length} image(s).`, false);
+      } catch (err) {
+        console.error(err);
+        setMsg(escapeHtml(err.message || 'Something went wrong'), true);
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      gallery.innerHTML = '';
+      msgEl.textContent = '';
+      promptEl.focus();
+    });
+
+    function setBusy(b){ statusEl.setAttribute('aria-busy', b ? 'true':'false'); }
+    function setMsg(t,isErr){ msgEl.className = isErr ? 'err' : 'ok'; msgEl.textContent = t; }
+
+    function addCard(url, prompt, index){
+      const fig = document.createElement('figure');
+      const img = document.createElement('img');
+      img.className = 'thumb'; img.loading = 'lazy'; img.alt = `Generated image ${index+1}`; img.src = url;
+
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const left = document.createElement('div');
+      const open = document.createElement('a'); open.textContent = 'Open'; open.href = url; open.target = '_blank'; open.rel = 'noopener noreferrer';
+      const copy = document.createElement('button'); copy.textContent = 'Copy URL'; copy.onclick = async ()=>{ try{ await navigator.clipboard.writeText(url); toast('URL copied'); }catch{ toast('Copy failed'); } };
+      const dl = document.createElement('a'); dl.textContent = 'Download'; dl.href = url; dl.download = '';
+      left.append(open, document.createTextNode(' \u00A0 '), copy, document.createTextNode(' \u00A0 '), dl);
+      const right = document.createElement('div'); right.className = 'muted'; right.textContent = truncate(prompt, 70);
+      meta.append(left, right);
+
+      fig.append(img, meta);
+      gallery.prepend(fig);
+    }
+
+    function truncate(str,n){ return str.length>n ? str.slice(0,n-1)+'…' : str; }
+    function escapeHtml(str){ return String(str).replace(/[&<>"]/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s])); }
+    function toast(text){ const t=document.createElement('div'); t.textContent=text; Object.assign(t.style,{position:'fixed',bottom:'18px',left:'50%',transform:'translateX(-50%)',background:'rgba(15,23,42,.9)',color:'#fff',padding:'10px 14px',border:'1px solid var(--border)',borderRadius:'999px',zIndex:1000}); document.body.appendChild(t); setTimeout(()=>t.remove(),1300); }
+  </script>
+</body>
+</html>

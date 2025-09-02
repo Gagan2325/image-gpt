@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+jspm_packages/
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.vercel/
+.cache/
+.tmp/
+
+# Logs & diagnostics
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+node-heapdump-*.heapsnapshot
+
+# Coverage & reports
+coverage/
+.nyc_output/
+reports/
+
+# Environment files (keep an example checked in)
+.env
+.env.*
+!.env.example
+.env.local
+.env.*.local
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs
+.vscode/
+.idea/
+
+# Misc
+*.tgz
+*.swp
+*.swo
+tmp/
+temp/
